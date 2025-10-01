@@ -36,4 +36,4 @@ In example.
 - person1 and person2 are two distinct instances of the Person struct.
 - Each instance has its own separate Name and Age values. Changing person1.Name will not affect person2.Name.
 
-Часть ....
+Часть Dependency Injection:
