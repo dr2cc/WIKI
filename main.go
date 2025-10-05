@@ -10,15 +10,18 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// **// Method 2: Structs Implementing http.Handler
+// **// Method 2: (using http.Handler) Structs Implementing http.Handler
 // Another approach is defining a struct that includes the dependencies as fields
 // and then implementing the ServeHTTP method on this struct.
 // Другой подход заключается в создании (=определении) структуры,
 // которая в качестве типов полей будет иметь "зависимости"
 // (другой пользовательский тип или его поля!),
 // а затем реализации метода ServeHTTP для этой структуры.
-// ServeHTTP это метод интерфейса Handler.
+// ServeHTTP это единственный метод интерфейса Handler.
 // 📌
+
+// Любой тип, реализующий метод ServeHTTP(ResponseWriter, *Request),
+// считается http.Handler
 type app struct {
 	logger *slog.Logger
 }
@@ -27,11 +30,16 @@ type app struct {
 // чтобы функция считалась ручкой (handler), она должна реализовывать метод ServeHTTP()
 // со следующей сигнатурой:
 // ServeHTTP(w http.ResponseWriter, r *http.Request)
+//
+// А вот это точно.
+// http.Handler:
+// Это интерфейс, который определяет один метод: ServeHTTP(ResponseWriter, *Request).
+// Любой тип, реализующий этот (ServeHTTP) метод, считается http.Handler.
 func (app *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// // Log у slog это сложный метод..
 	//app.Logger.Log("Received a request")
-	app.logger.Info("Received a request")
-	fmt.Fprintln(w, "Request logged(зарегистрирован) successfully(успешно)")
+	app.logger.Info("Method 2 processed. Received a request")
+	fmt.Fprintln(w, "Method 2 processed. Request logged(зарегистрирован) successfully(успешно)")
 }
 
 // Довожу до рабочего варианта
@@ -54,18 +62,29 @@ type env struct {
 	db *sql.DB
 }
 
-func (e *env) myHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// You can (вы можете) now use e.db in your handler
-		err := e.db.Ping() // Example function call
-		if err != nil {
-			fmt.Fprintf(w, "Ping db details: %+v", err)
-			return
-		}
-
-		fmt.Fprintf(w, "Ping db details: %+v", "OK")
+// Переделал в ServeHTTP
+func (e *env) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	err := e.db.Ping()
+	if err != nil {
+		fmt.Fprintf(w, "Ping db details: %+v", err)
+		return
 	}
+
+	fmt.Fprintf(w, "Ping db details: %+v", "Method 1 processed!")
 }
+
+// func (e *env) myHandler() http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		// You can (вы можете) now use e.db in your handler
+// 		err := e.db.Ping() // Example function call
+// 		if err != nil {
+// 			fmt.Fprintf(w, "Ping db details: %+v", err)
+// 			return
+// 		}
+
+// 		fmt.Fprintf(w, "Ping db details: %+v", "OK")
+// 	}
+// }
 
 // Довожу до рабочего варианта
 // По шаблону статьи создаю здесь подключение к sqlite
@@ -81,12 +100,24 @@ func initializeDatabase() *sql.DB {
 //*// Method 1: Using Closure
 
 func main() {
-	//**// Method 1: Using Closure
+	// ❗Cуть методов 1 и 2❗
+	// Благодаря реализации ServeHTTP как метода структуры
+	// (можно использовать и http.Handler и http.HandlerFunc)
+	// обработчик ("ручка") может работать с ее полями и производить внутри себя не только действия с http запросом,
+	// но и с "зависимостями" - подключаться к db, передавать данные логгеру и т.д..
+	// Все эти данные становятся частью "состояния" функции обработчика.
+
+	//**// Method 1
+
 	env := &env{
 		db: initializeDatabase(),
 	}
-	http.HandleFunc("/endpoint", env.myHandler())
-	//*// Method 1: Using Closure
+
+	// мой
+	http.Handle("/endpoint", env)
+	// // из примера
+	// http.HandleFunc("/endpoint", env.myHandler())
+	//*// Method 1
 
 	//**// Method 2
 	// Создаем объект slog
@@ -94,9 +125,7 @@ func main() {
 	app := &app{
 		logger: logger,
 	}
-	// Как я понимаю отличие от первого метода только в возможности использования
-	// http.Handle вместо http.HandleFunc (тип HandlerFunc — это адаптер,
-	//  позволяющий использовать обычные функции в качестве ручек). Яснее не стало..
+
 	http.Handle("/", app)
 	//*// Method 2
 
