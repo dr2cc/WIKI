@@ -66,8 +66,9 @@ type env struct {
 func (e *env) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err := e.db.Ping()
 	if err != nil {
-		fmt.Fprintf(w, "Ping db details: %+v", err)
-		return
+		panic(err)
+		// fmt.Fprintf(w, "Ping db details: %+v", err)
+		// return
 	}
 
 	fmt.Fprintf(w, "Ping db details: %+v", "Method 1 processed!")
